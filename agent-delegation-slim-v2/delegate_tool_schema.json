@@ -1,0 +1,36 @@
+{
+  "name": "delegate_task",
+  "description": "将独立子任务外包给轻量子 Agent，返回精简的结构化结果。适用于搜索、长文档抽取、分类、摘要、格式转换，以及图片识别/生成、视频理解/生成、语音理解/生成等多模态场景。多模态任务必须外包。调用时必须在 return_template 中附上对应模板的完整子 Agent Prompt。子 Agent 只返回 JSON，不返回原始数据和过程。",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "task_type": {
+        "type": "string",
+        "enum": ["search", "extract", "classify", "summarize", "transform", "image_recognize", "image_generate", "video_recognize", "video_generate", "audio_recognize", "audio_generate", "generic"],
+        "description": "子任务类型，决定主 Agent 从 templates/ 读取哪个模板填入 return_template。多模态类（image_*/video_*/audio_*）必须外包。"
+      },
+      "input": {
+        "type": "string",
+        "description": "传给子 Agent 的输入。文本类为查询词/文本/数据；多模态类为图片/视频/音频的 URL 或本地路径，可附带文字说明。"
+      },
+      "return_template": {
+        "type": "string",
+        "description": "必填。从 templates/ 目录下对应 task_type 的 *_return.md 文件中复制的完整子 Agent Prompt，包含 JSON Schema、字段约束、长度限制、禁止项等。子 Agent 收到后严格按此执行，不需要自行猜测格式。禁止只传 task_type 而省略此字段。"
+      },
+      "output_schema": {
+        "type": "string",
+        "description": "要求子 Agent 返回的 JSON 字段说明，例如：answer, key_points, sources。与 return_template 中的 Schema 对应。"
+      },
+      "max_tokens": {
+        "type": "integer",
+        "description": "子 Agent 允许返回的最大 token 数，默认 500，建议 300-800",
+        "default": 500
+      },
+      "extra_constraints": {
+        "type": "string",
+        "description": "可选。额外约束，如'sources最多3条'、'只返回2025年后的数据'等"
+      }
+    },
+    "required": ["task_type", "input", "return_template", "output_schema"]
+  }
+}
