@@ -9,16 +9,20 @@
 #   & '<skill目录>\scripts\doubao.ps1' -Action send -Text '看图说话' -Files 'C:\a.png','C:\b.txt'
 #   & '<skill目录>\scripts\doubao.ps1' -Action read -MaxLines 10
 #   & '<skill目录>\scripts\doubao.ps1' -Action wait -WaitSec 60  # 等待回复生成完毕
+#   & '<skill目录>\scripts\doubao.ps1' -Action extract -OutDir 'C:\out' -MinutesBack 10 -MinKB 100  # 从缓存提取最近生成的原文件
 
 param(
-    [ValidateSet('status','newchat','mode','send','attach','read','wait')]
+    [ValidateSet('status','newchat','mode','send','attach','read','wait','extract')]
     [string]$Action = 'status',
     [string]$Text = '',
     [string[]]$Files = @(),
     [string]$Mode = '',
     [int]$WaitSec = 0,
     [int]$MaxLines = 20,
-    [switch]$NewChat
+    [switch]$NewChat,
+    [string]$OutDir = '',
+    [int]$MinutesBack = 15,
+    [int]$MinKB = 100
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,6 +41,7 @@ public static class W32Doubao {
     [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr h, EnumProc cb, IntPtr l);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder sb, int max);
     [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr h);
+    [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
 }
 '@
 }
@@ -53,7 +58,8 @@ function Get-MainWindow {
 function Wake-Tree($win) {
     # 向窗口发 WM_GETOBJECT 唤醒 Chromium 无障碍树（否则树里只有窗口按钮）
     [W32Doubao]::SendMessage([IntPtr]$win.Current.NativeWindowHandle, 0x003D, [IntPtr]::Zero, [IntPtr]0xFFFFFFFC) | Out-Null
-    Start-Sleep -Milliseconds 1500
+    # 树构建需 ≥2s，短了会拿到不完整子树（部分控件缺失）；每次 FindAll 前都应重新唤醒
+    Start-Sleep -Milliseconds 2000
 }
 
 function Get-All($win) {
@@ -67,7 +73,7 @@ function Find-InputEdit($all) {
         if ($e.Current.ControlType.ProgrammaticName -ne 'ControlType.Edit') { continue }
         try { $null = $e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern) } catch { continue }
         $r = $e.Current.BoundingRectangle
-        if ($r.Width -gt 300 -and $r.Height -gt 20) {
+        if ($r.Width -gt (300 * $script:scale) -and $r.Height -gt (20 * $script:scale)) {
             if (-not $best -or $r.Width -gt $best.Current.BoundingRectangle.Width) { $best = $e }
         }
     }
@@ -81,7 +87,7 @@ function Invoke-SendButton($all, $edit) {
     foreach ($e in $all) {
         if ($e.Current.ControlType.ProgrammaticName -ne 'ControlType.Button') { continue }
         $br = $e.Current.BoundingRectangle
-        if ($br.X -gt ($r.X + $r.Width - 160) -and $br.Y -gt ($r.Y + 20) -and $br.Y -lt ($r.Y + 140)) {
+        if ($br.X -gt ($r.X + $r.Width - (160 * $script:scale)) -and $br.Y -gt ($r.Y + (20 * $script:scale)) -and $br.Y -lt ($r.Y + (140 * $script:scale))) {
             if (($e.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName }) -contains 'InvokePatternIdentifiers.Pattern') {
                 $e.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
                 return $true
@@ -162,7 +168,7 @@ function Add-Attachments($win, [string[]]$files) {
     foreach ($e in $all) {
         if ($e.Current.ControlType.ProgrammaticName -ne 'ControlType.Button') { continue }
         $br = $e.Current.BoundingRectangle
-        if ($br.X -gt ($er.X - 80) -and $br.X -lt $er.X -and $br.Y -gt ($er.Y + 30) -and $br.Y -lt ($er.Y + 130)) {
+        if ($br.X -gt ($er.X - (80 * $script:scale)) -and $br.X -lt $er.X -and $br.Y -gt ($er.Y + (30 * $script:scale)) -and $br.Y -lt ($er.Y + (130 * $script:scale))) {
             if (($e.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName }) -contains 'ExpandCollapsePatternIdentifiers.Pattern') { $plus = $e; break }
         }
     }
@@ -212,7 +218,7 @@ function Add-Attachments($win, [string[]]$files) {
 
 function Get-Messages($all, $edit, $maxLines) {
     $er = $edit.Current.BoundingRectangle
-    $left = $er.X - 50
+    $left = $er.X - (50 * $script:scale)
     $items = @()
     foreach ($e in $all) {
         $ct = $e.Current.ControlType.ProgrammaticName
@@ -220,7 +226,7 @@ function Get-Messages($all, $edit, $maxLines) {
         $nm = $e.Current.Name
         if (-not $nm) { continue }
         $r = $e.Current.BoundingRectangle
-        if ($r.X -lt $left -or $r.Y -lt 80 -or $r.Y -gt ($er.Y - 10)) { continue }
+        if ($r.X -lt $left -or $r.Y -lt (80 * $script:scale) -or $r.Y -gt ($er.Y - (10 * $script:scale))) { continue }
         $items += ,[pscustomobject]@{ Y = $r.Y; X = $r.X; Text = $nm }
     }
     return @($items | Sort-Object Y, X | Select-Object -Last $maxLines)
@@ -242,7 +248,57 @@ function Wait-ReplyStable($win, $edit, $timeoutSec) {
 }
 
 try {
+    # extract 不需要窗口/登录状态：直接从磁盘缓存提取，先短路处理
+    if ($Action -eq 'extract') {
+        if (-not $OutDir) { throw '需要 -OutDir（输出目录）' }
+        if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Force -Path $OutDir | Out-Null }
+        $cacheDir = Join-Path $env:LOCALAPPDATA 'Doubao\User Data\Default\Cache\Cache_Data'
+        if (-not (Test-Path $cacheDir)) { throw '找不到豆包缓存目录' }
+        $since = (Get-Date).AddMinutes(-$MinutesBack)
+        $sigs = @(
+            @{N='PNG';  B=[byte[]](0x89,0x50,0x4E,0x47); Ext='.png'},
+            @{N='JPEG'; B=[byte[]](0xFF,0xD8,0xFF); Ext='.jpg'},
+            @{N='WEBP'; B=[byte[]](0x52,0x49,0x46,0x46); Ext='.webp'},
+            @{N='DOCX'; B=[byte[]](0x50,0x4B,0x03,0x04); Ext='.zip'},
+            @{N='DOC';  B=[byte[]](0xD0,0xCF,0x11,0xE0); Ext='.doc'}
+        )
+        $cnt = 0
+        foreach ($f in (Get-ChildItem $cacheDir -File | Where-Object { $_.LastWriteTime -gt $since -and $_.Length -gt ($MinKB * 1KB) } | Sort-Object LastWriteTime)) {
+            $bytes = $null
+            try {
+                $fs = [IO.File]::Open($f.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+                try { $bytes = New-Object byte[] $fs.Length; $fs.Read($bytes, 0, $bytes.Length) | Out-Null } finally { $fs.Dispose() }
+            } catch { continue }
+            $head = New-Object byte[] 16
+            [Array]::Copy($bytes, 0, $head, 0, [Math]::Min(16, $bytes.Length))
+            foreach ($s in $sigs) {
+                $match = $true
+                for ($i = 0; $i -lt [Math]::Min(4, $s.B.Length); $i++) { if ($head[$i] -ne $s.B[$i]) { $match = $false; break } }
+                if ($s.N -eq 'WEBP' -and $match) {
+                    $w = [Text.Encoding]::ASCII.GetBytes('WEBP')
+                    for ($i = 0; $i -lt 4; $i++) { if ($head[8 + $i] -ne $w[$i]) { $match = $false; break } }
+                }
+                if ($match) {
+                    $dest = Join-Path $OutDir ("doubao-{0:yyyyMMdd-HHmmss}-{1}{2}" -f $f.LastWriteTime, $s.N, $s.Ext)
+                    [IO.File]::WriteAllBytes($dest, $bytes)
+                    Write-Output ("提取: {0} -> {1} ({2:N0} bytes)" -f $s.N, $dest, $bytes.Length)
+                    $cnt++
+                    break
+                }
+            }
+        }
+        Write-Output ("共提取 {0} 个文件到 {1}" -f $cnt, $OutDir)
+        exit 0
+    }
+
     $win = Get-MainWindow
+    # 运行时 DPI 缩放探测：所有像素阈值均乘 $scale，兼容任意 DPI/多显示器（UIA 坐标始终是物理像素）
+    $script:scale = 1.0
+    try {
+        $dpi = [W32Doubao]::GetDpiForWindow([IntPtr]$win.Current.NativeWindowHandle)
+        if ($dpi -and $dpi -gt 0) { $script:scale = $dpi / 96.0 }
+    } catch {}
+    if ($script:scale -lt 0.5 -or $script:scale -gt 4) { $script:scale = 1.0 }
     Wake-Tree $win
     $all = Get-All $win
     $edit = $null
@@ -295,6 +351,7 @@ try {
             Write-Output ($(if ($done) { '回复生成完毕' } else { '等待超时' }))
             Get-Messages (Get-All $win) $edit $MaxLines | ForEach-Object { Write-Output $_.Text }
         }
+        # 'extract' 在 try 块开头短路处理，不依赖窗口
     }
 } catch {
     Write-Output "DOUBAO_ERROR: $($_.Exception.Message)"
