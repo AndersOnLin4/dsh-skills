@@ -21,8 +21,22 @@
 - 执行策略报错（cannot be loaded because running scripts is disabled）：每个新 pwsh 进程先 `Set-ExecutionPolicy -Scope Process Bypass -Force`。
 - 脚本解析乱码（Unexpected token 乱码）：文件被编辑工具重写后丢了 UTF-8 BOM，用 SKILL.md 里的补 BOM 命令恢复。
 - 豆包版本更新后按钮/菜单名变了：先跑 `-Action status`，再手工扫描 UIA 树定位新名称，更新脚本。
+- 控件时有时无（屏幕上明明有却找不到）：无障碍树是异步构建的，`WM_GETOBJECT` 后要等 ≥2s 再 `FindAll`；轮询查找时**每次都要重新唤醒**，否则拿到旧树/半棵树（表现为个别控件永远"找不到"）。
+- hover 才出现的控件（消息工具栏、图片/文档预览的保存/下载按钮）：注入的 `WM_MOUSEMOVE`/`PostMessage` **无法触发** Chromium 的 hover（客户端只认真实光标），且这些控件随光标离开自动隐藏。对策：让用户把光标悬停在目标上，脚本轮询到控件出现后立刻 Invoke；或直接走下面的缓存提取，绕开 UI。
+- 多显示器/混 DPI（如 4K+1080p）：不要用截图取内容（PrintWindow 可能黑屏、UIA 物理坐标与光标逻辑坐标错位、且损失精度）。脚本已按窗口实际 DPI 自动缩放全部像素阈值（`GetDpiForWindow` → `dpi/96`），换显示器/换机器无需改代码。
 
 ## 备注
 
 - 该通道走桌面端 UI，等同于用户手动操作，不消耗 API Key 额度；用户豆包账户自身配额照常消耗（档位以用户账户为准）。
 - 模式下拉里「工作任务 Pro」带“升级”标记，可能触发付费/升级提示，慎用。
+
+## 拿生成的原文件（图片/文档）——优先缓存提取，不要截图
+
+豆包生成的图片/文档经网络拉取后会落到 Chromium 磁盘缓存：`%LOCALAPPDATA%\Doubao\User Data\Default\Cache\Cache_Data\f_*`。
+
+1. 记下生成完成的大致时间，列出该时间点前后几分钟内修改的 `f_*` 文件（按 `LastWriteTime` 排序）。
+2. 按文件签名识别：PNG `89 50 4E 47`、JPEG `FF D8 FF`、WebP `RIFF`+`WEBP`、docx/ZIP `50 4B 03 04`、doc/OLE2 `D0 CF 11 E0`、PDF `25 50 44 46`。
+3. 读取时用 `FileShare.ReadWrite -bor FileShare.Delete` 共享读（缓存文件被进程锁着），整段拷出即为**原始无损文件**——与显示器数量、DPI、缩放完全无关。
+4. 聊天消息本体在 `Default\IndexedDB\chrome_doubao-chat_*.indexeddb.leveldb\*.log`（UTF-8 文本，可搜消息内容和附件元数据）；文档类附件的元数据（file_id/file_type 等）可能在 `Default\WebStorage\6\IndexedDB\indexeddb.leveldb\*.log`。
+
+若缓存里没有目标文件（尚未被预览/下载过），先在 UI 里打开一次预览让资源入缓存，再重复 1-3。注意：豆包文档预览拉取的是内部二进制格式（无 docx 签名），只有真正触发“下载”才会产生标准 docx/doc 文件。
