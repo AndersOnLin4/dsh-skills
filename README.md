@@ -1,49 +1,72 @@
-# doubao-skill
+# DSH Skills Collection · DSH 技能合集
 
-A [DeepSeek Harness (DSH)](https://github.com/deepseek-ai) skill that drives the local **Doubao desktop client** (Doubao.exe) entirely through Windows UI Automation — no mouse, no keyboard focus stealing, no API key.
+A collection of practical skills for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai) — Windows automation, GitHub publishing, and token-saving subagent delegation.
 
-You can open a new chat, switch between 快速 / 专家 / 工作任务 modes, send messages, upload file/image attachments, and read replies, all from one PowerShell script, while the human keeps working normally on the same machine.
+面向 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai) 的实用技能合集：Windows 自动化、GitHub 发布、省 token 的子代理委派。
 
-## Install
+## Included Skills · 包含的技能
 
-1. Make sure the Doubao desktop client is installed, running, and logged in.
-2. Copy the `doubao` folder into a skills root of your DSH installation:
-   - user-level (all projects): `<dshHome>\skills\` — i.e. `G:\harness\dsh-home\skills\` (typical) or `~/.dsh/skills`
-   - project-level: `<project>\.dsh\skills\` or `<project>\.agents\skills\`
-3. That's it. The skill is discovered automatically; no restart needed in most setups.
+| Skill 技能 | 说明（中文） | Description (English) |
+| --- | --- | --- |
+| `doubao` | 驱动本机豆包桌面客户端：开新会话、切模式（快速/专家/工作任务）、发消息、上传文件/图片、读回复。纯 UIA + 消息注入，零鼠标不抢焦点 | Drive the local Doubao desktop client: new chats, mode switching, messaging, file/image uploads, reading replies. Pure UIA + message injection — zero mouse, no focus stealing |
+| `github-push` | GitHub 推送三分支：有 git 走 git push；无 git 走 REST API 直传；无凭证自动设备码授权（浏览器输验证码）| Push to GitHub with three branches: git push when git exists; REST API upload otherwise; automatic device-code auth (enter a code in the browser) when no credentials |
+| `agent-delegation-slim` | 子任务委派 + 12 套强制精简返回 Schema，主上下文只留结构化 JSON | Subagent delegation with 12 enforced slim-return schemas — the main context keeps only structured JSON |
 
-## Usage (inside DSH, via the pwsh tool)
+## Install · 安装
+
+Copy the skill folders you need into a DSH skills root:
+
+把需要的技能目录复制到 DSH 的 skills 根目录：
+
+- User-level (all projects) 用户级（所有项目）: `<dshHome>\skills\` — e.g. `G:\harness\dsh-home\skills\` (typical) or `~/.dsh/skills`
+- Project-level 项目级: `<project>\.dsh\skills\` or `<project>\.agents\skills\`
+
+Example 示例:
 
 ```powershell
-$s = Join-Path $env:DSH_HOME 'skills\doubao\scripts\doubao.ps1'   # or <skill-dir>\scripts\doubao.ps1
-Set-ExecutionPolicy -Scope Process Bypass -Force
-
-& $s -Action status                                        # window title / current mode / input content
-& $s -Action newchat                                       # start a new chat
-& $s -Action mode -Mode 快速                                # 快速 | 专家 | 工作任务 Auto | 工作任务 Turbo | 工作任务 Pro
-& $s -Action send -Text '你好' -WaitSec 30 -MaxLines 10     # send and wait for the reply to finish
-& $s -Action send -Text '描述这张图' -Files 'C:\a.png','C:\b.txt' -WaitSec 40   # send with attachments
-& $s -Action send -Text '...' -NewChat                     # new chat, then send
-& $s -Action attach -Files 'C:\x.pdf'                      # attach only
-& $s -Action read -MaxLines 15                             # read the last 15 lines of the conversation
-& $s -Action wait -WaitSec 60                              # wait until generation finishes
+Copy-Item .\doubao, .\github-push, .\agent-delegation-slim -Destination "$env:DSH_HOME\skills" -Recurse
 ```
 
-See `doubao/SKILL.md` for the skill body and `doubao/references/troubleshooting.md` for mechanism details and troubleshooting.
+Skills are discovered automatically 技能会被自动发现（多数情况下无需重启）.
 
-## How it works
+## Quick Start · 快速开始
 
-- Locates the Doubao main window by **process name** (`Doubao`), so the install path doesn't matter.
-- Wakes the Chromium accessibility tree with `WM_GETOBJECT`, then drives the UI with UIA patterns only (`InvokePattern`, `ValuePattern`, `ExpandCollapsePattern`) — the physical cursor is never moved.
-- File uploads go through the native open dialog via `WM_SETTEXT` + `BM_CLICK` message injection.
-- Reply completion is detected by polling the message-area text for stability.
+### doubao
 
-## Notes
+```powershell
+$s = Join-Path $env:DSH_HOME 'skills\doubao\scripts\doubao.ps1'
+Set-ExecutionPolicy -Scope Process Bypass -Force
+& $s -Action send -Text '你好' -WaitSec 30 -MaxLines 10          # send & wait 发消息并等回复
+& $s -Action mode -Mode 专家                                     # switch mode 切换模式（快速/专家/工作任务 Auto/Turbo/Pro）
+& $s -Action send -Text '描述这张图' -Files 'C:\a.png','C:\b.txt' -WaitSec 40   # with attachments 带附件
+```
 
-- This path is equivalent to the human operating the app: your Doubao account quota applies as usual; no API key is consumed.
-- Requires Windows with PowerShell (5.1+ or 7+); tested with the Doubao Windows desktop client on a 200%-scaled display.
-- UI strings (mode names, menu items) may change when Doubao updates; see `references/troubleshooting.md` if a step stops working.
+Requires the Doubao desktop client running and logged in 需要豆包桌面客户端已运行并登录.
 
-## License
+### github-push
 
-MIT — see [LICENSE](LICENSE).
+```powershell
+$s = Join-Path $env:DSH_HOME 'skills\github-push\scripts\push-github.ps1'
+Set-ExecutionPolicy -Scope Process Bypass -Force
+& $s -Action check                                               # detect environment 检测环境
+& $s -Action push -Path 'G:\my-project' -Repo 'my-repo' -Visibility public   # push a folder 推目录
+& $s -Action release -Path 'G:\my-project' -Repo 'my-repo' -Tag 'v1.0.0' -Body 'changelog 变更说明'  # zip + Release 打包发布
+```
+
+- If no token is found, the script starts GitHub **device-code auth**: it prints a code like `ABCD-1234` and the URL `https://github.com/login/device` — open the URL, enter the code, done. The token is saved to `%USERPROFILE%\.github-token.txt` for reuse. 未发现凭证时脚本自动发起设备码授权：打印形如 `ABCD-1234` 的验证码和网址，浏览器输入即完成；token 自动保存复用。
+- Token lookup order 查找顺序: `-TokenFile` → `$env:GH_PAT` → workspace `.github-token.txt` → `%USERPROFILE%\.github-token.txt`.
+
+## Releases · 版本下载
+
+Versioned archives are attached to [GitHub Releases](https://github.com/AndersOnLin4/dsh-skills/releases): download `dsh-skills-vX.Y.Z.zip`, unzip it, and copy the skill folders into your skills root.
+
+版本压缩包发布在 [GitHub Releases](https://github.com/AndersOnLin4/dsh-skills/releases)：下载 `dsh-skills-vX.Y.Z.zip`，解压后把技能目录复制到 skills 根目录即可。
+
+## Requirements · 环境要求
+
+- Windows with PowerShell 5.1+ or PowerShell 7  Windows + PowerShell 5.1+ 或 PowerShell 7
+- `doubao` / `github-push` skills were tested on a 200%-scaled display; both work without git and without any API key. 两个技能均在 200% 缩放显示器上实测；无需 git、无需 API Key。
+
+## License · 许可证
+
+MIT — see [LICENSE](LICENSE) 详见 [LICENSE](LICENSE)。
