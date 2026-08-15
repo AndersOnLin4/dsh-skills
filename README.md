@@ -9,7 +9,7 @@ A collection of practical skills for [DeepSeek Harness (DSH)](https://github.com
 | Skill 技能 | 说明（中文） | Description (English) |
 | --- | --- | --- |
 | `doubao` | 驱动本机豆包桌面客户端：开新会话、切模式（快速/专家/工作任务）、发消息、上传文件/图片、读回复。纯 UIA + 消息注入，零鼠标不抢焦点 | Drive the local Doubao desktop client: new chats, mode switching, messaging, file/image uploads, reading replies. Pure UIA + message injection — zero mouse, no focus stealing |
-| `doubao-v2` | 豆包驱动 v2：自动启动豆包、窗口自动移回主屏并最大化（副屏/离屏自愈）、probe 探测三件套 + UI 发现方法链、修复附件上传实测 bug。**独立项目仓库：[doubao-skill](https://github.com/AndersOnLin4/doubao-skill)** | Doubao driver v2: auto-launch, auto move-to-primary-screen & maximize, probe tools + UI discovery chain, attachment-upload bug fixes. **Separate project repo: [doubao-skill](https://github.com/AndersOnLin4/doubao-skill)** |
+| `doubao-v2` | 豆包驱动 v2：自动启动豆包、窗口自动移回主屏并最大化（副屏/离屏自愈）、probe 探测三件套 + UI 发现方法链、修复附件上传实测 bug。**独立项目仓库：[doubao-v2](https://github.com/AndersOnLin4/doubao-v2)** | Doubao driver v2: auto-launch, auto move-to-primary-screen & maximize, probe tools + UI discovery chain, attachment-upload bug fixes. **Separate project repo: [doubao-v2](https://github.com/AndersOnLin4/doubao-v2)** |
 | `deepseek-web` | 驱动 DeepSeek 网页版聊天（chat.deepseek.com）：自动检测/启动浏览器、新建会话、发消息、读回复。纯 UIA，零鼠标不抢焦点 | Drive the DeepSeek web chat (chat.deepseek.com): auto-detect/launch the browser, new chats, messaging, reading replies. Pure UIA — zero mouse, no focus stealing |
 | `deepseek-web-v2` | DeepSeek 网页版 v2：窗口自动移回主屏并最大化、probe 探测三件套 + UI 发现方法链、修复发送后读回复拿旧树的问题 | DeepSeek web v2: window auto-normalization (primary screen + maximize), probe tools + UI discovery chain, stale-tree fix when reading replies |
 | `github-push` | GitHub 推送三分支：有 git 走 git push；无 git 走 REST API 直传；无凭证自动设备码授权（浏览器输验证码）| Push to GitHub with three branches: git push when git exists; REST API upload otherwise; automatic device-code auth (enter a code in the browser) when no credentials |
@@ -19,8 +19,8 @@ A collection of practical skills for [DeepSeek Harness (DSH)](https://github.com
 ## Versioning · 版本策略
 
 - `-v2` 目录是当前推荐版：自带**窗口就位保障**（自动启动/移回主屏/最大化）与**探测工具 + 发现方法链**，对副屏、离屏、客户端改版更抗造；同名无后缀目录是 v1 原版，保留作回退。
-- `doubao-v2` 为独立项目，仓库在 [AndersOnLin4/doubao-skill](https://github.com/AndersOnLin4/doubao-skill)，本仓库不重复收录。
-- `-v2` folders are the recommended versions (auto window normalization + probe tools + discovery chain); the un-suffixed folders are the original v1 kept as fallback. `doubao-v2` lives in its own repo: [AndersOnLin4/doubao-skill](https://github.com/AndersOnLin4/doubao-skill).
+- `doubao-v2` 为独立项目，仓库在 [AndersOnLin4/doubao-v2](https://github.com/AndersOnLin4/doubao-v2)，本仓库不重复收录。
+- `-v2` folders are the recommended versions (auto window normalization + probe tools + discovery chain); the un-suffixed folders are the original v1 kept as fallback. `doubao-v2` lives in its own repo: [AndersOnLin4/doubao-v2](https://github.com/AndersOnLin4/doubao-v2).
 
 ## Install · 安装
 
@@ -36,7 +36,7 @@ Example 示例:
 ```powershell
 Copy-Item .\doubao-v2, .\deepseek-web-v2, .\github-push, .\agent-delegation-slim-v2 -Destination "$env:DSH_HOME\skills" -Recurse
 # doubao-v2 独立仓库安装：
-Copy-Item .\doubao-v2 -Destination "$env:DSH_HOME\skills" -Recurse   # 从 AndersOnLin4/doubao-skill 下载后
+Copy-Item .\doubao-v2 -Destination "$env:DSH_HOME\skills" -Recurse   # 从 AndersOnLin4/doubao-v2 下载后
 ```
 
 Skills are discovered automatically 技能会被自动发现（多数情况下无需重启）.
@@ -54,7 +54,7 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 & $s -Action probe-windows                                       # 诊断：窗口/主屏信息
 ```
 
-v2 no longer requires the Doubao client to be pre-launched — it auto-launches, restores, and maximizes the window. v2 无需预先启动豆包：自动拉起、还原并最大化窗口；完整用法见 [doubao-skill 仓库](https://github.com/AndersOnLin4/doubao-skill)。
+v2 no longer requires the Doubao client to be pre-launched — it auto-launches, restores, and maximizes the window. v2 无需预先启动豆包：自动拉起、还原并最大化窗口；完整用法见 [doubao-v2 仓库](https://github.com/AndersOnLin4/doubao-v2)。
 
 ### deepseek-web / deepseek-web-v2
 
