@@ -1,3 +1,11 @@
+> [!WARNING]
+> **本仓库已归档（2026-08-22，只读，不再更新）。**
+> 全部有效内容已统一整理并入 **[andersonlin4-skills](https://github.com/AndersOnLin4/andersonlin4-skills)** ——12 个 skill、4 大分类、仅保留最新版本并完成一轮内容优化（失效路径修复、命名规范统一、元数据补齐、可移植化）。
+> 
+> 本仓库收录 dsh 家族 skill 的 v1 与 v2 版本；最新 v3 版本（agent-delegation-slim / doubao / deepseek-web / github-push）已收录于新仓库。
+
+---
+
 # DSH Skills Collection · DSH 技能合集
 
 实用技能合集，面向 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai)：Windows 自动化、GitHub 发布、省 token 的子代理委派。
